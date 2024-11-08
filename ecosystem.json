@@ -1,0 +1,21 @@
+{
+  "deploy": {
+    "dev": {
+      "user": "root",
+      "host": [
+        {
+          "host": "host IP",
+          "port": "22"
+        }
+      ],
+      "ref": "origin/master",
+      "repo": "",
+      "path": "",
+      "ssh_options": ["StrictHostKeyChecking=no", "PasswordAuthentication=no"],
+      "post-deploy": "docker stop current-backend-1 || true && docker rm $_ || true && docker compose up -d --build",
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}

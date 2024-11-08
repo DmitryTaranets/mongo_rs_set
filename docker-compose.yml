@@ -1,0 +1,82 @@
+version: "3.8"
+
+services:
+  mongo:
+    image: mongo:8.0
+    command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO_RS_PRIMARY_PORT}", "--keyFile", "/etc/mongodb/pki/keyfile"]
+    container_name: "mongo-primary"
+    ports:
+      - ${MONGO_RS_PRIMARY_PORT}:${MONGO_RS_PRIMARY_PORT}
+    healthcheck:
+      test: |
+        echo "try { rs.status() } catch (err) { 
+          rs.initiate({
+            _id:'rs0',
+            members:[
+              {_id:0,host:'mongo:${MONGO_RS_PRIMARY_PORT}',priority:1},
+              {_id:1,host:'mongo2:${MONGO_RS_SECONDARY1_PORT}',priority:0.5}
+            ]
+          }) 
+        }" | 
+        mongosh -u ${MONGO_ROOT_USER} -p ${MONGO_ROOT_PASSWORD} --port ${MONGO_RS_PRIMARY_PORT} --quiet
+      interval: 5s
+      timeout: 30s
+      start_period: 0s
+      start_interval: 1s
+      retries: 30
+    restart: always
+    networks:
+      - ${NETWORK_NAME}
+    volumes:
+      - ${PWD}/rs_keyfile:/etc/mongodb/pki/keyfile
+      - "mongo_data:/data/db"
+      - "mongo_config:/data/configdb"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+
+  mongo2:
+    image: mongo:8.0
+    command: [ "--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO_RS_SECONDARY1_PORT}", "--keyFile", "/etc/mongodb/pki/keyfile"]
+    container_name: "mongo-secondary-1"
+    ports:
+      - ${MONGO_RS_SECONDARY1_PORT}:${MONGO_RS_SECONDARY1_PORT}
+    restart: always
+    networks:
+      - ${NETWORK_NAME}
+    volumes:
+      - ${PWD}/rs_keyfile:/etc/mongodb/pki/keyfile
+      - "mongo2_data:/data/db"
+      - "mongo2_config:/data/configdb"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+
+  backend:
+    env_file: '.env'
+    container_name: "nest-backend"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3001:3000'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - ${NETWORK_NAME}
+    depends_on:
+      mongo:
+        condition: service_started
+      mongo2:
+        condition: service_started
+    restart: always
+
+networks:
+  ${NETWORK_NAME}:
+
+volumes:
+  mongo_data:
+  mongo2_data:
+  mongo_config:
+  mongo2_config:
